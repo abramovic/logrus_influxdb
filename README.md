@@ -90,7 +90,7 @@ When initializing the hook we attempt to first see if the database exists. If no
 
 #### Message Field
 
-We will insert your message into InfluxDB with the field `message` so please make sure not to use that name with your Logrus fields or else it will be overwritten. 
+We will insert your message into InfluxDB with the field `message` so please make sure not to use that name with your Logrus fields or else it will be overwritten.
 
 #### Special Fields
 

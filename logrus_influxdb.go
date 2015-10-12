@@ -88,16 +88,20 @@ func NewWithClientInfulxDBHook(client *influxdb.Client, database string, tags ma
 
 // Called when an event should be sent to InfluxDB
 func (hook *InfulxDBHook) Fire(entry *logrus.Entry) error {
+	// Merge all of the fields from Logrus as one entry in InfluxDB
+	fields := entry.Data
+
+	// If passing a "message" field then it will be overridden by the entry Message
+	fields["message"] = entry.Message
+
 	point := influxdb.Point{
 		Measurement: "logrus",
 		Tags:        hook.tags, // set the default tags from hook
-		Fields: map[string]interface{}{
-			"message": entry.Message,
-			"data":    entry.Data,
-		},
-		Time:      time.Now().UTC(),
-		Precision: "s",
+		Fields:      fields,
+		Time:        time.Now().UTC(),
+		Precision:   "s",
 	}
+
 	// Set the level of the entry
 	point.Tags["level"] = entry.Level.String()
 
