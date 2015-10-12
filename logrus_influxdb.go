@@ -14,8 +14,8 @@ import (
 
 const (
 	DefaultHost     = "localhost" // default InfluxDB hostname
-	DefaultPort     = 8086        // default InfluxDB Port
-	DefaultDatabase = "logrus"
+	DefaultPort     = 8086        // default InfluxDB port
+	DefaultDatabase = "logrus"    // default InfluxDB database. We'll only try to use this if one is not provided.
 )
 
 // InfulxDBHook delivers logs to an InfluxDB cluster.
@@ -32,8 +32,8 @@ func NewInfluxDBHook(hostname string, database string, tags map[string]string) (
 		database = DefaultDatabase
 	}
 
-	if tags == nil {
-		tags = map[string]string{}
+	if tags == nil { // if no tags exist then make an empty map[string]string
+		tags = make(map[string]string)
 	}
 
 	u, err := url.Parse(fmt.Sprintf("http://%s:%d", hostname, DefaultPort))
@@ -75,8 +75,8 @@ func NewWithClientInfulxDBHook(client *influxdb.Client, database string, tags ma
 		database = DefaultDatabase
 	}
 
-	if tags == nil {
-		tags = map[string]string{}
+	if tags == nil { // if no tags exist then make an empty map[string]string
+		tags = make(map[string]string)
 	}
 
 	// If the configuration is nil then assume default configurations
