@@ -88,7 +88,11 @@ When passing an empty string for the InfluxDB database name, we default to "logr
 
 When initializing the hook we attempt to first see if the database exists. If not, then we try to create it for your automagically.
 
-#### Special fields
+#### Message Field
+
+We will insert your message into InfluxDB with the field `message` so please make sure not to use that name with your Logrus fields or else it will be overwritten. 
+
+#### Special Fields
 
 Some logrus fields have a special meaning in this hook, these are `server_name`, `logger` and `http_request`  (taken from [Sentry Hook](https://github.com/evalphobia/logrus_sentry)).
 

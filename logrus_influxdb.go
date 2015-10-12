@@ -90,14 +90,14 @@ func NewWithClientInfulxDBHook(client *influxdb.Client, database string, tags ma
 func (hook *InfulxDBHook) Fire(entry *logrus.Entry) error {
 	point := influxdb.Point{
 		Measurement: "logrus",
-		Tags:        hook.tags, // set the default tags from Hook
+		Tags:        hook.tags, // set the default tags from hook
 		Fields: map[string]interface{}{
 			"message": entry.Message,
+			"data":    entry.Data,
 		},
 		Time:      time.Now(),
 		Precision: "s",
 	}
-
 	// Set the level of the entry
 	point.Tags["level"] = entry.Level.String()
 
@@ -111,7 +111,6 @@ func (hook *InfulxDBHook) Fire(entry *logrus.Entry) error {
 	if req, ok := getRequest(entry.Data, "http_request"); ok {
 		point.Fields["http_request"] = req
 	}
-	point.Fields["extras"] = map[string]interface{}(entry.Data)
 
 	_, err := hook.client.Write(influxdb.BatchPoints{
 		Points:          []influxdb.Point{point},
@@ -151,6 +150,8 @@ func (hook *InfulxDBHook) databaseExists() error {
 	if results[0].Series == nil || len(results[0].Series) == 0 {
 		return errors.New("Missing series from InfluxDB query response")
 	}
+
+	// This can probably be cleaned up
 	for _, value := range results[0].Series[0].Values {
 		for _, val := range value {
 			if v, ok := val.(string); ok { // InfluxDB returns back an interface. Try to check only the string values.
@@ -160,7 +161,7 @@ func (hook *InfulxDBHook) databaseExists() error {
 			}
 		}
 	}
-	return errors.New("No database exists")
+	return errors.New("No matching database can be detected")
 }
 
 // Try to detect if the database exists and if not, automatically create one.
