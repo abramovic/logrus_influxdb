@@ -95,7 +95,7 @@ func (hook *InfulxDBHook) Fire(entry *logrus.Entry) error {
 			"message": entry.Message,
 			"data":    entry.Data,
 		},
-		Time:      time.Now(),
+		Time:      time.Now().UTC(),
 		Precision: "s",
 	}
 	// Set the level of the entry
