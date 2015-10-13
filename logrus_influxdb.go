@@ -18,15 +18,15 @@ const (
 	DefaultDatabase = "logrus"    // default InfluxDB database. We'll only try to use this if one is not provided.
 )
 
-// InfulxDBHook delivers logs to an InfluxDB cluster.
-type InfulxDBHook struct {
+// InfluxDBHook delivers logs to an InfluxDB cluster.
+type InfluxDBHook struct {
 	client   *influxdb.Client
 	database string
 	tags     map[string]string
 }
 
-// NewInfulxDBHook creates a hook to be added to an instance of logger and initializes the InfluxDB client
-func NewInfluxDBHook(hostname string, database string, tags map[string]string) (*InfulxDBHook, error) {
+// NewInfluxDBHook creates a hook to be added to an instance of logger and initializes the InfluxDB client
+func NewInfluxDBHook(hostname string, database string, tags map[string]string) (*InfluxDBHook, error) {
 	// use the default database if we're missing one in the initialization
 	if database == "" {
 		database = DefaultDatabase
@@ -58,7 +58,7 @@ func NewInfluxDBHook(hostname string, database string, tags map[string]string) (
 		return nil, err
 	}
 
-	hook := &InfulxDBHook{client, database, tags}
+	hook := &InfluxDBHook{client, database, tags}
 
 	err = hook.autocreateDatabase()
 	if err != nil {
@@ -68,8 +68,8 @@ func NewInfluxDBHook(hostname string, database string, tags map[string]string) (
 	return hook, nil
 }
 
-// NewWithClientInfulxDBHook creates a hook using an initialized InfluxDB client.
-func NewWithClientInfulxDBHook(client *influxdb.Client, database string, tags map[string]string) (*InfulxDBHook, error) {
+// NewWithClientInfluxDBHook creates a hook using an initialized InfluxDB client.
+func NewWithClientInfluxDBHook(client *influxdb.Client, database string, tags map[string]string) (*InfluxDBHook, error) {
 	// use the default database if we're missing one in the initialization
 	if database == "" {
 		database = DefaultDatabase
@@ -83,11 +83,11 @@ func NewWithClientInfulxDBHook(client *influxdb.Client, database string, tags ma
 	if client == nil {
 		return NewInfluxDBHook(DefaultHost, database, tags)
 	}
-	return &InfulxDBHook{client, database, tags}, nil
+	return &InfluxDBHook{client, database, tags}, nil
 }
 
 // Called when an event should be sent to InfluxDB
-func (hook *InfulxDBHook) Fire(entry *logrus.Entry) error {
+func (hook *InfluxDBHook) Fire(entry *logrus.Entry) error {
 	// Merge all of the fields from Logrus as one entry in InfluxDB
 	fields := entry.Data
 
@@ -128,7 +128,7 @@ func (hook *InfulxDBHook) Fire(entry *logrus.Entry) error {
 }
 
 // queryDB convenience function to query the database
-func (hook *InfulxDBHook) queryDB(cmd string) ([]influxdb.Result, error) {
+func (hook *InfluxDBHook) queryDB(cmd string) ([]influxdb.Result, error) {
 	response, err := hook.client.Query(influxdb.Query{
 		Command:  cmd,
 		Database: hook.database,
@@ -143,7 +143,7 @@ func (hook *InfulxDBHook) queryDB(cmd string) ([]influxdb.Result, error) {
 }
 
 // Return back an error if the database does not exist in InfluxDB
-func (hook *InfulxDBHook) databaseExists() error {
+func (hook *InfluxDBHook) databaseExists() error {
 	results, err := hook.queryDB("SHOW DATABASES")
 	if err != nil {
 		return err
@@ -169,7 +169,7 @@ func (hook *InfulxDBHook) databaseExists() error {
 }
 
 // Try to detect if the database exists and if not, automatically create one.
-func (hook *InfulxDBHook) autocreateDatabase() error {
+func (hook *InfluxDBHook) autocreateDatabase() error {
 	err := hook.databaseExists()
 	if err == nil {
 		return nil
@@ -217,7 +217,7 @@ func getRequest(d logrus.Fields, key string) (*http.Request, bool) {
 }
 
 // Available logging levels.
-func (hook *InfulxDBHook) Levels() []logrus.Level {
+func (hook *InfluxDBHook) Levels() []logrus.Level {
 	return []logrus.Level{
 		logrus.PanicLevel,
 		logrus.FatalLevel,

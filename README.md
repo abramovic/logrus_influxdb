@@ -44,7 +44,7 @@ func main() {
 
 #### With an existing InfluxDB Client
 
-If you wish to initialize a InfluxDB Hook with an already initialized InfluxDB client, you can use the `NewWithClientInfulxDBHook` constructor:
+If you wish to initialize a InfluxDB Hook with an already initialized InfluxDB client, you can use the `NewWithClientInfluxDBHook` constructor:
 
 ```go
 import (
@@ -73,7 +73,7 @@ func main() {
   /*
     Use the InfluxDB client taken from earlier in the application
   */
-  hook, err  := logrus_influxdb.NewWithClientInfulxDBHook(conn, "my_influxdb_database", nil)  // no default tags in this example
+  hook, err  := logrus_influxdb.NewWithClientInfluxDBHook(conn, "my_influxdb_database", nil)  // no default tags in this example
   if err == nil {
     log.Hooks.Add(hook)
   }
