@@ -98,7 +98,7 @@ func (hook *InfluxDBHook) Fire(entry *logrus.Entry) error {
 		Measurement: "logrus",
 		Tags:        hook.tags, // set the default tags from hook
 		Fields:      fields,
-		Time:        time.Now().UTC(),
+		Time:        entry.Time, // use time from Logrus
 		Precision:   "s",
 	}
 
