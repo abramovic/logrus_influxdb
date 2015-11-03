@@ -102,7 +102,6 @@ func (hook *InfluxDBHook) Fire(entry *logrus.Entry) error {
 		Tags:        hook.tags, // set the default tags from hook
 		Fields:      fields,
 		Time:        entry.Time, // use time from Logrus
-		Precision:   "s",
 	}
 
 	// Set the level of the entry
