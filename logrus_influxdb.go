@@ -13,9 +13,12 @@ import (
 )
 
 const (
-	DefaultHost     = "localhost" // default InfluxDB hostname
-	DefaultPort     = 8086        // default InfluxDB port
-	DefaultDatabase = "logrus"    // default InfluxDB database. We'll only try to use this if one is not provided.
+	// DefaultHost default InfluxDB hostname
+	DefaultHost = "localhost"
+	// DefaultPort default InfluxDB port
+	DefaultPort = 8086
+	// DefaultDatabase default InfluxDB database. We'll only try to use this if one is not provided.
+	DefaultDatabase = "logrus"
 )
 
 // InfluxDBHook delivers logs to an InfluxDB cluster.
@@ -86,7 +89,7 @@ func NewWithClientInfluxDBHook(client *influxdb.Client, database string, tags ma
 	return &InfluxDBHook{client, database, tags}, nil
 }
 
-// Called when an event should be sent to InfluxDB
+// Fire is called when an event should be sent to InfluxDB
 func (hook *InfluxDBHook) Fire(entry *logrus.Entry) error {
 	// Merge all of the fields from Logrus as one entry in InfluxDB
 	fields := entry.Data
@@ -216,7 +219,7 @@ func getRequest(d logrus.Fields, key string) (*http.Request, bool) {
 	return req, true
 }
 
-// Available logging levels.
+// Levels is available logging levels.
 func (hook *InfluxDBHook) Levels() []logrus.Level {
 	return []logrus.Level{
 		logrus.PanicLevel,
