@@ -24,13 +24,13 @@ const (
 type InfluxDBHook struct {
 	client   influxdb.Client
 	database string
-	tags     map[string]string
+	tagList  []string
 }
 
 // NewInfluxDBHook creates a hook to be added to an instance of logger and initializes the InfluxDB client
 func NewInfluxDBHook(
 	hostname, database string,
-	tags map[string]string,
+	tagList []string,
 ) (*InfluxDBHook, error) {
 
 	if hostname == "" {
@@ -42,8 +42,8 @@ func NewInfluxDBHook(
 		database = DefaultDatabase
 	}
 
-	if tags == nil { // if no tags exist then make an empty map[string]string
-		tags = make(map[string]string)
+	if tagList == nil { // if no tags exist then make an empty map[string]string
+		tagList = []string{}
 	}
 
 	client, err := influxdb.NewHTTPClient(influxdb.HTTPConfig{
@@ -57,7 +57,7 @@ func NewInfluxDBHook(
 	}
 	defer client.Close()
 
-	hook := &InfluxDBHook{client, database, tags}
+	hook := &InfluxDBHook{client, database, tagList}
 
 	err = hook.autocreateDatabase()
 	if err != nil {
@@ -71,22 +71,22 @@ func NewInfluxDBHook(
 func NewWithClientInfluxDBHook(
 	client influxdb.Client,
 	database string,
-	tags map[string]string,
+	tagList []string,
 ) (*InfluxDBHook, error) {
 	// use the default database if we're missing one in the initialization
 	if database == "" {
 		database = DefaultDatabase
 	}
 
-	if tags == nil { // if no tags exist then make an empty map[string]string
-		tags = make(map[string]string)
+	if tagList == nil { // if no tags exist then make an empty map[string]string
+		tagList = []string{}
 	}
 
 	// If the configuration is nil then assume default configurations
 	if client == nil {
-		return NewInfluxDBHook(DefaultHost, database, tags)
+		return NewInfluxDBHook(DefaultHost, database, tagList)
 	}
-	return &InfluxDBHook{client, database, tags}, nil
+	return &InfluxDBHook{client, database, tagList}, nil
 }
 
 // Fire is called when an event should be sent to InfluxDB
@@ -104,22 +104,30 @@ func (hook *InfluxDBHook) Fire(entry *logrus.Entry) error {
 		RetentionPolicy: "default",
 	})
 
-	measurement := "logrus"
-	if measurement, ok := getField(entry.Data, "measurement"); ok {
-		hook.tags["measurement"] = measurement
-	}
-	// getAndDel and getAndDelRequest are taken from https://github.com/evalphobia/logrus_sentry
-	if logger, ok := getField(entry.Data, "logger"); ok {
-		hook.tags["logger"] = logger
+	var measurement string
+	var ok bool
+	if measurement, ok = getField(entry.Data, "measurement"); !ok {
+		measurement = "logrus"
 	}
 
+	tags := make(map[string]string)
 	// Set the level of the entry
-	hook.tags["level"] = entry.Level.String()
+	tags["level"] = entry.Level.String()
+	// getAndDel and getAndDelRequest are taken from https://github.com/evalphobia/logrus_sentry
+	if logger, ok := getField(entry.Data, "logger"); ok {
+		tags["logger"] = logger
+	}
+
+	for _, tag := range hook.tagList {
+		tagValue, ok := getField(entry.Data, tag)
+		if ok {
+			tags[tag] = tagValue
+		}
+	}
 
 	pt, err := influxdb.NewPoint(
 		measurement,
-		hook.tags,
-		// hook.fields,
+		tags,
 		fields,
 		entry.Time,
 	)
@@ -194,6 +202,11 @@ func (hook *InfluxDBHook) autocreateDatabase() error {
 	return nil
 }
 
+// If the tag implements the Stringer interface
+type strInt interface {
+	String() string
+}
+
 // Try to return a field from logrus
 // Taken from Sentry adapter (from https://github.com/evalphobia/logrus_sentry)
 func getField(d logrus.Fields, key string) (string, bool) {
@@ -206,10 +219,15 @@ func getField(d logrus.Fields, key string) (string, bool) {
 		return "", false
 	}
 
-	if val, ok = v.(string); !ok {
-		return "", false
+	if val2, ok := v.(strInt); ok {
+		return val2.String(), true
 	}
-	return val, true
+
+	if val, ok = v.(string); ok {
+		return val, true
+	}
+
+	return "", false
 }
 
 // Try to return an http request
