@@ -142,7 +142,7 @@ func (hook *InfluxDBHook) queryDB(cmd string) ([]influxdb.Result, error) {
 		Database: hook.database,
 	})
 	if err != nil {
-		return nil, response.Error()
+		return nil, err
 	}
 	if response.Error() != nil {
 		return res, response.Error()
