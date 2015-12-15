@@ -36,7 +36,7 @@ func main() {
   hook, err := logrus_influxdb.NewInfluxDBHook("localhost", "my_influxdb_database", tagList)
 
   if err == nil {
-    logrus.AddHook(hook)
+    log.Hooks.Add(hook)
   }  
 }
 
