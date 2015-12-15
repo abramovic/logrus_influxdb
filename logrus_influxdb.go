@@ -4,12 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 	"os"
 	"time"
 
 	"github.com/Sirupsen/logrus"
-	influxdb "github.com/influxdb/influxdb/client"
+	influxdb "github.com/influxdb/influxdb/client/v2"
 )
 
 const (
@@ -23,45 +22,42 @@ const (
 
 // InfluxDBHook delivers logs to an InfluxDB cluster.
 type InfluxDBHook struct {
-	client   *influxdb.Client
+	client   influxdb.Client
 	database string
-	tags     map[string]string
+	tagList  []string
 }
 
 // NewInfluxDBHook creates a hook to be added to an instance of logger and initializes the InfluxDB client
-func NewInfluxDBHook(hostname string, database string, tags map[string]string) (*InfluxDBHook, error) {
+func NewInfluxDBHook(
+	hostname, database string,
+	tagList []string,
+) (*InfluxDBHook, error) {
+
+	if hostname == "" {
+		hostname = DefaultHost
+	}
+
 	// use the default database if we're missing one in the initialization
 	if database == "" {
 		database = DefaultDatabase
 	}
 
-	if tags == nil { // if no tags exist then make an empty map[string]string
-		tags = make(map[string]string)
+	if tagList == nil { // if no tags exist then make an empty map[string]string
+		tagList = []string{}
 	}
 
-	u, err := url.Parse(fmt.Sprintf("http://%s:%d", hostname, DefaultPort))
-	if err != nil {
-		return nil, err
-	}
-	conf := influxdb.Config{
-		URL:      *u,
-		Username: os.Getenv("INFLUX_USER"), // detect InfluxDB environment variables
+	client, err := influxdb.NewHTTPClient(influxdb.HTTPConfig{
+		Addr:     fmt.Sprintf("http://%s:%d", hostname, DefaultPort),
+		Username: os.Getenv("INFLUX_USER"),
 		Password: os.Getenv("INFLUX_PWD"),
-		Timeout:  100 * time.Millisecond, // Default timeout of 100 milliseconds
-	}
-
-	client, err := influxdb.NewClient(conf)
+		Timeout:  100 * time.Millisecond,
+	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("NewInfluxDBHook: Error creating InfluxDB Client, %v", err)
 	}
+	defer client.Close()
 
-	// Try pinging InfluxDB to see if it's a valid connection
-	_, _, err = client.Ping()
-	if err != nil {
-		return nil, err
-	}
-
-	hook := &InfluxDBHook{client, database, tags}
+	hook := &InfluxDBHook{client, database, tagList}
 
 	err = hook.autocreateDatabase()
 	if err != nil {
@@ -72,21 +68,25 @@ func NewInfluxDBHook(hostname string, database string, tags map[string]string) (
 }
 
 // NewWithClientInfluxDBHook creates a hook using an initialized InfluxDB client.
-func NewWithClientInfluxDBHook(client *influxdb.Client, database string, tags map[string]string) (*InfluxDBHook, error) {
+func NewWithClientInfluxDBHook(
+	client influxdb.Client,
+	database string,
+	tagList []string,
+) (*InfluxDBHook, error) {
 	// use the default database if we're missing one in the initialization
 	if database == "" {
 		database = DefaultDatabase
 	}
 
-	if tags == nil { // if no tags exist then make an empty map[string]string
-		tags = make(map[string]string)
+	if tagList == nil { // if no tags exist then make an empty map[string]string
+		tagList = []string{}
 	}
 
 	// If the configuration is nil then assume default configurations
 	if client == nil {
-		return NewInfluxDBHook(DefaultHost, database, tags)
+		return NewInfluxDBHook(DefaultHost, database, tagList)
 	}
-	return &InfluxDBHook{client, database, tags}, nil
+	return &InfluxDBHook{client, database, tagList}, nil
 }
 
 // Fire is called when an event should be sent to InfluxDB
@@ -97,35 +97,51 @@ func (hook *InfluxDBHook) Fire(entry *logrus.Entry) error {
 	// If passing a "message" field then it will be overridden by the entry Message
 	fields["message"] = entry.Message
 
-	point := influxdb.Point{
-		Measurement: "logrus",
-		Tags:        hook.tags, // set the default tags from hook
-		Fields:      fields,
-		Time:        entry.Time, // use time from Logrus
-	}
-
-	// Set the level of the entry
-	point.Tags["level"] = entry.Level.String()
-
-	// getAndDel and getAndDelRequest are taken from https://github.com/evalphobia/logrus_sentry
-	if logger, ok := getField(entry.Data, "logger"); ok {
-		point.Tags["logger"] = logger
-	}
-	if serverName, ok := getField(entry.Data, "server_name"); ok {
-		point.Tags["server_name"] = serverName
-	}
-	if req, ok := getRequest(entry.Data, "http_request"); ok {
-		point.Fields["http_request"] = req
-	}
-
-	_, err := hook.client.Write(influxdb.BatchPoints{
-		Points:          []influxdb.Point{point},
+	// Create a new point batch
+	bp, _ := influxdb.NewBatchPoints(influxdb.BatchPointsConfig{
 		Database:        hook.database,
+		Precision:       "s",
 		RetentionPolicy: "default",
 	})
-	if err != nil {
-		return err
+
+	var measurement string
+	var ok bool
+	if measurement, ok = getField(entry.Data, "measurement"); !ok {
+		measurement = "logrus"
 	}
+
+	tags := make(map[string]string)
+	// Set the level of the entry
+	tags["level"] = entry.Level.String()
+	// getAndDel and getAndDelRequest are taken from https://github.com/evalphobia/logrus_sentry
+	if logger, ok := getField(entry.Data, "logger"); ok {
+		tags["logger"] = logger
+	}
+
+	for _, tag := range hook.tagList {
+		tagValue, ok := getField(entry.Data, tag)
+		if ok {
+			tags[tag] = tagValue
+		}
+	}
+
+	pt, err := influxdb.NewPoint(
+		measurement,
+		tags,
+		fields,
+		entry.Time,
+	)
+	if err != nil {
+		return fmt.Errorf("Fire: %v", err)
+	}
+
+	bp.AddPoint(pt)
+
+	err = hook.client.Write(bp)
+	if err != nil {
+		return fmt.Errorf("Fire: %v", err)
+	}
+
 	return nil
 }
 
@@ -141,6 +157,7 @@ func (hook *InfluxDBHook) queryDB(cmd string) ([]influxdb.Result, error) {
 	if response.Error() != nil {
 		return nil, response.Error()
 	}
+
 	return response.Results, nil
 }
 
@@ -176,11 +193,18 @@ func (hook *InfluxDBHook) autocreateDatabase() error {
 	if err == nil {
 		return nil
 	}
-	_, err = hook.queryDB(fmt.Sprintf("create database %s", hook.database))
+
+	_, err = hook.queryDB(fmt.Sprintf("CREATE DATABASE %s", hook.database))
 	if err != nil {
 		return err
 	}
+
 	return nil
+}
+
+// If the tag implements the Stringer interface
+type strInt interface {
+	String() string
 }
 
 // Try to return a field from logrus
@@ -195,10 +219,15 @@ func getField(d logrus.Fields, key string) (string, bool) {
 		return "", false
 	}
 
-	if val, ok = v.(string); !ok {
-		return "", false
+	if val2, ok := v.(strInt); ok {
+		return val2.String(), true
 	}
-	return val, true
+
+	if val, ok = v.(string); ok {
+		return val, true
+	}
+
+	return "", false
 }
 
 // Try to return an http request

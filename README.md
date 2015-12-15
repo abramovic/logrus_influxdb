@@ -31,13 +31,13 @@ import (
 )
 func main() {
   log         := logrus.New()
-  global_tags := map[string]string{
-    "website": "example.com",
-  }
-  hook, err   := logrus_influxdb.NewInfluxDBHook("localhost", "my_influxdb_database", global_tags)
+
+  tagList := []string{"app_id", "user_steam_id", "action", "bot_steam_id", "trade_offer_id"}
+  hook, err := logrus_influxdb.NewInfluxDBHook("localhost", "my_influxdb_database", tagList)
+
   if err == nil {
     log.Hooks.Add(hook)
-  }
+  }  
 }
 
 ```
