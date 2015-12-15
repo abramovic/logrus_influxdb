@@ -136,7 +136,6 @@ func (hook *InfluxDBHook) Fire(entry *logrus.Entry) error {
 
 // queryDB convenience function to query the database
 func (hook *InfluxDBHook) queryDB(cmd string) ([]influxdb.Result, error) {
-	var res []influxdb.Result
 	response, err := hook.client.Query(influxdb.Query{
 		Command:  cmd,
 		Database: hook.database,
@@ -145,7 +144,7 @@ func (hook *InfluxDBHook) queryDB(cmd string) ([]influxdb.Result, error) {
 		return nil, err
 	}
 	if response.Error() != nil {
-		return res, response.Error()
+		return nil, response.Error()
 	}
 
 	return response.Results, nil
