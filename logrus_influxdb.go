@@ -53,7 +53,7 @@ func NewInfluxDBHook(
 		Timeout:  100 * time.Millisecond,
 	})
 	if err != nil {
-		fmt.Println("Error creating InfluxDB Client: ", err.Error())
+		return nil, fmt.Errorf("NewInfluxDBHook: Error creating InfluxDB Client, %v", err)
 	}
 	defer client.Close()
 
@@ -124,12 +124,15 @@ func (hook *InfluxDBHook) Fire(entry *logrus.Entry) error {
 		entry.Time,
 	)
 	if err != nil {
-		return fmt.Errorf("Error: %v", err)
+		return fmt.Errorf("Fire: %v", err)
 	}
 
 	bp.AddPoint(pt)
 
-	hook.client.Write(bp)
+	err = hook.client.Write(bp)
+	if err != nil {
+		return fmt.Errorf("Fire: %v", err)
+	}
 
 	return nil
 }
