@@ -202,11 +202,6 @@ func (hook *InfluxDBHook) autocreateDatabase() error {
 	return nil
 }
 
-// If the tag implements the Stringer interface
-type strInt interface {
-	String() string
-}
-
 // Try to return a field from logrus
 // Taken from Sentry adapter (from https://github.com/evalphobia/logrus_sentry)
 func getField(d logrus.Fields, key string) (string, bool) {
@@ -219,7 +214,7 @@ func getField(d logrus.Fields, key string) (string, bool) {
 		return "", false
 	}
 
-	if val2, ok := v.(strInt); ok {
+	if val2, ok := v.(fmt.Stringer); ok {
 		return val2.String(), true
 	}
 
