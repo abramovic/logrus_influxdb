@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/Sirupsen/logrus"
@@ -106,7 +107,7 @@ func (hook *InfluxDBHook) Fire(entry *logrus.Entry) error {
 
 	var measurement string
 	var ok bool
-	if measurement, ok = getField(entry.Data, "measurement"); !ok {
+	if measurement, ok = getTag(entry.Data, "measurement"); !ok {
 		measurement = "logrus"
 	}
 
@@ -114,13 +115,12 @@ func (hook *InfluxDBHook) Fire(entry *logrus.Entry) error {
 	// Set the level of the entry
 	tags["level"] = entry.Level.String()
 	// getAndDel and getAndDelRequest are taken from https://github.com/evalphobia/logrus_sentry
-	if logger, ok := getField(entry.Data, "logger"); ok {
+	if logger, ok := getTag(entry.Data, "logger"); ok {
 		tags["logger"] = logger
 	}
 
 	for _, tag := range hook.tagList {
-		tagValue, ok := getField(entry.Data, tag)
-		if ok {
+		if tagValue, ok := getTag(entry.Data, tag); ok {
 			tags[tag] = tagValue
 		}
 	}
@@ -204,25 +204,35 @@ func (hook *InfluxDBHook) autocreateDatabase() error {
 
 // Try to return a field from logrus
 // Taken from Sentry adapter (from https://github.com/evalphobia/logrus_sentry)
-func getField(d logrus.Fields, key string) (string, bool) {
-	var (
-		ok  bool
-		v   interface{}
-		val string
-	)
+func getTag(d logrus.Fields, key string) (string, bool) {
+
+	var ok bool
+	var v interface{}
+
 	if v, ok = d[key]; !ok {
 		return "", false
 	}
 
-	if val2, ok := v.(fmt.Stringer); ok {
-		return val2.String(), true
+	switch vs := v.(type) {
+	case fmt.Stringer:
+		return vs.String(), true
+	case string:
+		return vs, true
+	case int:
+		return strconv.FormatInt(int64(vs), 10), true
+	case int32:
+		return strconv.FormatInt(int64(vs), 10), true
+	case int64:
+		return strconv.FormatInt(vs, 10), true
+	case uint:
+		return strconv.FormatUint(uint64(vs), 10), true
+	case uint32:
+		return strconv.FormatUint(uint64(vs), 10), true
+	case uint64:
+		return strconv.FormatUint(vs, 10), true
+	default:
+		return "", false
 	}
-
-	if val, ok = v.(string); ok {
-		return val, true
-	}
-
-	return "", false
 }
 
 // Try to return an http request
