@@ -19,13 +19,18 @@ const (
 	DefaultPort = 8086
 	// DefaultDatabase default InfluxDB database. We'll only try to use this if one is not provided.
 	DefaultDatabase = "logrus"
+	// DefaultBatchInterval
+	DefaultBatchInterval = 5 * time.Second
 )
 
 // InfluxDBHook delivers logs to an InfluxDB cluster.
 type InfluxDBHook struct {
-	client   influxdb.Client
-	database string
-	tagList  []string
+	client          influxdb.Client
+	database        string
+	tagList         []string
+	batchP          influxdb.BatchPoints
+	lastBatchUpdate time.Time
+	batchInterval   time.Duration
 }
 
 // NewInfluxDBHook creates a hook to be added to an instance of logger and initializes the InfluxDB client
@@ -47,6 +52,8 @@ func NewInfluxDBHook(
 		tagList = []string{}
 	}
 
+	batchInterval := DefaultBatchInterval
+
 	client, err := influxdb.NewHTTPClient(influxdb.HTTPConfig{
 		Addr:     fmt.Sprintf("http://%s:%d", hostname, DefaultPort),
 		Username: os.Getenv("INFLUX_USER"),
@@ -58,7 +65,12 @@ func NewInfluxDBHook(
 	}
 	defer client.Close()
 
-	hook := &InfluxDBHook{client, database, tagList}
+	hook := &InfluxDBHook{
+		client:        client,
+		database:      database,
+		tagList:       tagList,
+		batchInterval: batchInterval,
+	}
 
 	err = hook.autocreateDatabase()
 	if err != nil {
@@ -83,11 +95,18 @@ func NewWithClientInfluxDBHook(
 		tagList = []string{}
 	}
 
+	batchInterval := DefaultBatchInterval
+
 	// If the configuration is nil then assume default configurations
 	if client == nil {
 		return NewInfluxDBHook(DefaultHost, database, tagList)
 	}
-	return &InfluxDBHook{client, database, tagList}, nil
+	return &InfluxDBHook{
+		client:        client,
+		database:      database,
+		tagList:       tagList,
+		batchInterval: batchInterval,
+	}, nil
 }
 
 // Fire is called when an event should be sent to InfluxDB
@@ -99,11 +118,15 @@ func (hook *InfluxDBHook) Fire(entry *logrus.Entry) error {
 	fields["message"] = entry.Message
 
 	// Create a new point batch
-	bp, _ := influxdb.NewBatchPoints(influxdb.BatchPointsConfig{
-		Database:        hook.database,
-		Precision:       "s",
-		RetentionPolicy: "default",
-	})
+	if hook.batchP == nil {
+		var err error
+		hook.batchP, err = influxdb.NewBatchPoints(influxdb.BatchPointsConfig{
+			Database: hook.database,
+		})
+		if err != nil {
+			return fmt.Errorf("Fire: %v", err)
+		}
+	}
 
 	var measurement string
 	var ok bool
@@ -135,11 +158,17 @@ func (hook *InfluxDBHook) Fire(entry *logrus.Entry) error {
 		return fmt.Errorf("Fire: %v", err)
 	}
 
-	bp.AddPoint(pt)
+	hook.batchP.AddPoint(pt)
 
-	err = hook.client.Write(bp)
-	if err != nil {
-		return fmt.Errorf("Fire: %v", err)
+	// Arbitrary length of points trigger, just to make sure it doesn't overflow
+	if hook.lastBatchUpdate.Add(hook.batchInterval).Before(time.Now()) ||
+		len(hook.batchP.Points()) > 200 {
+		err = hook.client.Write(hook.batchP)
+		if err != nil {
+			return fmt.Errorf("Fire: %v", err)
+		}
+		hook.lastBatchUpdate = time.Now()
+		hook.batchP = nil
 	}
 
 	return nil
