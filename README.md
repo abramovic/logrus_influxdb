@@ -1,7 +1,7 @@
 # InfluxDB Hook for Logrus
 
 [InfluxDB](https://influxdb.com) Scalable datastore for metrics, events, and real-time analytics
-[GitHub](https://github.com/influxdb/influxdb)
+[GitHub](https://github.com/influxdata/influxdb)
 
 ## Usage
 
