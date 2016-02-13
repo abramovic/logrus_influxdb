@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/Sirupsen/logrus"
-	influxdb "github.com/influxdb/influxdb/client/v2"
+	influxdb "github.com/influxdata/influxdb/client/v2"
 )
 
 const (
