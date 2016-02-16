@@ -32,7 +32,7 @@ import (
 func main() {
   log         := logrus.New()
 
-  tagList := []string{"app_id", "user_steam_id", "action", "bot_steam_id", "trade_offer_id"}
+  tagList := []string{"tag1", "tag2"}
   hook, err := logrus_influxdb.NewInfluxDBHook("localhost", "my_influxdb_database", tagList)
 
   if err == nil {

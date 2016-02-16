@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/Sirupsen/logrus"
@@ -18,13 +19,18 @@ const (
 	DefaultPort = 8086
 	// DefaultDatabase default InfluxDB database. We'll only try to use this if one is not provided.
 	DefaultDatabase = "logrus"
+	// DefaultBatchInterval
+	DefaultBatchInterval = 5 * time.Second
 )
 
 // InfluxDBHook delivers logs to an InfluxDB cluster.
 type InfluxDBHook struct {
-	client   influxdb.Client
-	database string
-	tagList  []string
+	client          influxdb.Client
+	database        string
+	tagList         []string
+	batchP          influxdb.BatchPoints
+	lastBatchUpdate time.Time
+	batchInterval   time.Duration
 }
 
 // NewInfluxDBHook creates a hook to be added to an instance of logger and initializes the InfluxDB client
@@ -46,6 +52,8 @@ func NewInfluxDBHook(
 		tagList = []string{}
 	}
 
+	batchInterval := DefaultBatchInterval
+
 	client, err := influxdb.NewHTTPClient(influxdb.HTTPConfig{
 		Addr:     fmt.Sprintf("http://%s:%d", hostname, DefaultPort),
 		Username: os.Getenv("INFLUX_USER"),
@@ -57,7 +65,12 @@ func NewInfluxDBHook(
 	}
 	defer client.Close()
 
-	hook := &InfluxDBHook{client, database, tagList}
+	hook := &InfluxDBHook{
+		client:        client,
+		database:      database,
+		tagList:       tagList,
+		batchInterval: batchInterval,
+	}
 
 	err = hook.autocreateDatabase()
 	if err != nil {
@@ -82,11 +95,18 @@ func NewWithClientInfluxDBHook(
 		tagList = []string{}
 	}
 
+	batchInterval := DefaultBatchInterval
+
 	// If the configuration is nil then assume default configurations
 	if client == nil {
 		return NewInfluxDBHook(DefaultHost, database, tagList)
 	}
-	return &InfluxDBHook{client, database, tagList}, nil
+	return &InfluxDBHook{
+		client:        client,
+		database:      database,
+		tagList:       tagList,
+		batchInterval: batchInterval,
+	}, nil
 }
 
 // Fire is called when an event should be sent to InfluxDB
@@ -98,15 +118,19 @@ func (hook *InfluxDBHook) Fire(entry *logrus.Entry) error {
 	fields["message"] = entry.Message
 
 	// Create a new point batch
-	bp, _ := influxdb.NewBatchPoints(influxdb.BatchPointsConfig{
-		Database:        hook.database,
-		Precision:       "s",
-		RetentionPolicy: "default",
-	})
+	if hook.batchP == nil {
+		var err error
+		hook.batchP, err = influxdb.NewBatchPoints(influxdb.BatchPointsConfig{
+			Database: hook.database,
+		})
+		if err != nil {
+			return fmt.Errorf("Fire: %v", err)
+		}
+	}
 
 	var measurement string
 	var ok bool
-	if measurement, ok = getField(entry.Data, "measurement"); !ok {
+	if measurement, ok = getTag(entry.Data, "measurement"); !ok {
 		measurement = "logrus"
 	}
 
@@ -114,13 +138,12 @@ func (hook *InfluxDBHook) Fire(entry *logrus.Entry) error {
 	// Set the level of the entry
 	tags["level"] = entry.Level.String()
 	// getAndDel and getAndDelRequest are taken from https://github.com/evalphobia/logrus_sentry
-	if logger, ok := getField(entry.Data, "logger"); ok {
+	if logger, ok := getTag(entry.Data, "logger"); ok {
 		tags["logger"] = logger
 	}
 
 	for _, tag := range hook.tagList {
-		tagValue, ok := getField(entry.Data, tag)
-		if ok {
+		if tagValue, ok := getTag(entry.Data, tag); ok {
 			tags[tag] = tagValue
 		}
 	}
@@ -135,11 +158,17 @@ func (hook *InfluxDBHook) Fire(entry *logrus.Entry) error {
 		return fmt.Errorf("Fire: %v", err)
 	}
 
-	bp.AddPoint(pt)
+	hook.batchP.AddPoint(pt)
 
-	err = hook.client.Write(bp)
-	if err != nil {
-		return fmt.Errorf("Fire: %v", err)
+	// Arbitrary length of points trigger, just to make sure it doesn't overflow
+	if hook.lastBatchUpdate.Add(hook.batchInterval).Before(time.Now()) ||
+		len(hook.batchP.Points()) > 200 {
+		err = hook.client.Write(hook.batchP)
+		if err != nil {
+			return fmt.Errorf("Fire: %v", err)
+		}
+		hook.lastBatchUpdate = time.Now()
+		hook.batchP = nil
 	}
 
 	return nil
@@ -202,32 +231,37 @@ func (hook *InfluxDBHook) autocreateDatabase() error {
 	return nil
 }
 
-// If the tag implements the Stringer interface
-type strInt interface {
-	String() string
-}
-
 // Try to return a field from logrus
 // Taken from Sentry adapter (from https://github.com/evalphobia/logrus_sentry)
-func getField(d logrus.Fields, key string) (string, bool) {
-	var (
-		ok  bool
-		v   interface{}
-		val string
-	)
+func getTag(d logrus.Fields, key string) (string, bool) {
+
+	var ok bool
+	var v interface{}
+
 	if v, ok = d[key]; !ok {
 		return "", false
 	}
 
-	if val2, ok := v.(strInt); ok {
-		return val2.String(), true
+	switch vs := v.(type) {
+	case fmt.Stringer:
+		return vs.String(), true
+	case string:
+		return vs, true
+	case int:
+		return strconv.FormatInt(int64(vs), 10), true
+	case int32:
+		return strconv.FormatInt(int64(vs), 10), true
+	case int64:
+		return strconv.FormatInt(vs, 10), true
+	case uint:
+		return strconv.FormatUint(uint64(vs), 10), true
+	case uint32:
+		return strconv.FormatUint(uint64(vs), 10), true
+	case uint64:
+		return strconv.FormatUint(vs, 10), true
+	default:
+		return "", false
 	}
-
-	if val, ok = v.(string); ok {
-		return val, true
-	}
-
-	return "", false
 }
 
 // Try to return an http request
