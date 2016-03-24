@@ -5,36 +5,32 @@
 
 ## Usage
 
-#### Basic Usage (without tags)
-
 ```go
 import (
   "github.com/Sirupsen/logrus"
   "github.com/Abramovic/logrus_influxdb"
 )
 func main() {
-  // The simplest way to connect
-  log       := logrus.New()
-  hook, err := logrus_influxdb.NewInfluxDBHook("localhost", "my_influxdb_database", nil)
-  if err == nil {
-    log.Hooks.Add(hook)
+  log    := logrus.New()
+
+  config := &logrus_influxdb.Config{
+    Host: "localhost",
+    Port: 8086,
+    Database: "logrus",
+    UseHTTPs: false,
+    Precision: "ns",
+    Tags: []string{"tag1", "tag2"},
+    BatchInterval: (5 * time.Second),
+    BatchCount: 200, // set to "0" to disable batching
   }
-}
-```
 
-#### Basic Usage (with tags)
+  /*
+    Use nil if you want to use the default configurations
 
-```go
-import (
-  "github.com/Sirupsen/logrus"
-  "github.com/Abramovic/logrus_influxdb"
-)
-func main() {
-  log         := logrus.New()
+    hook, err := logrus_influxdb.NewInfluxDB(nil)
+  */
 
-  tagList := []string{"tag1", "tag2"}
-  hook, err := logrus_influxdb.NewInfluxDBHook("localhost", "my_influxdb_database", tagList)
-
+  hook, err := logrus_influxdb.NewInfluxDB(config)
   if err == nil {
     log.Hooks.Add(hook)
   }  
@@ -53,32 +49,29 @@ import (
   "time"
   "github.com/Sirupsen/logrus"
   "github.com/Abramovic/logrus_influxdb"
-  client "github.com/influxdb/influxdb/client"
+  client "github.com/influxdata/influxdb/client/v2"
 )
 
 func main() {
-  log   := logrus.New()
+	log := logrus.New()
 
-  /*
-    Connect to InfluxDB using the standard client.
-    We are ignoring errors in this example
-  */
-  u, _    := url.Parse(fmt.Sprintf("http://%s:%d", "localhost", 8086)) // default localhost and 8086 port for InfluxDB
-  config  := client.Config{
-    URL:      *u,
-    Timeout:  100 * time.Millisecond, // The InfluxDB default timeout is 0. In this example we're using 100ms.
+  // In this example we will use the default configurations
+  config := &logrus_influxdb.Config{
+    Tags:  []string{"tag1", "tag2"}, // use the following tags
   }
-  conn, _ := client.NewClient(config)
 
-  /*
-    Use the InfluxDB client taken from earlier in the application
-  */
-  hook, err  := logrus_influxdb.NewWithClientInfluxDBHook(conn, "my_influxdb_database", nil)  // no default tags in this example
-  if err == nil {
-    log.Hooks.Add(hook)
-  }
+	// Connect to InfluxDB using the standard client.
+	influxClient, _ := client.NewHTTPClient(client.HTTPConfig{
+		Addr: "http://localhost:8086",
+	})
+
+	hook, err := logrus_influxdb.NewInfluxDB(config, influxClient)
+	if err == nil {
+		log.Hooks.Add(hook)
+	}
 }
 ```
+
 
 ## Behind the scenes
 
