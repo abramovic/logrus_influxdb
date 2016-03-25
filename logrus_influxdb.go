@@ -1,137 +1,90 @@
 package logrus_influxdb
 
 import (
-	"errors"
 	"fmt"
-	"net/http"
-	"os"
-	"strconv"
+	"sync"
 	"time"
 
 	"github.com/Sirupsen/logrus"
 	influxdb "github.com/influxdata/influxdb/client/v2"
 )
 
-const (
-	// DefaultHost default InfluxDB hostname
-	DefaultHost = "localhost"
-	// DefaultPort default InfluxDB port
-	DefaultPort = 8086
-	// DefaultDatabase default InfluxDB database. We'll only try to use this if one is not provided.
-	DefaultDatabase = "logrus"
-	// DefaultBatchInterval
-	DefaultBatchInterval = 5 * time.Second
+var (
+	defaultHost          = "localhost"
+	defaultPort          = 8086
+	defaultDatabase      = "logrus"
+	defaultBatchInterval = 5 * time.Second
+	defaultBatchCount    = 200
+	defaultPrecision     = "ns"
 )
 
 // InfluxDBHook delivers logs to an InfluxDB cluster.
 type InfluxDBHook struct {
-	client          influxdb.Client
-	database        string
-	tagList         []string
-	batchP          influxdb.BatchPoints
-	lastBatchUpdate time.Time
-	batchInterval   time.Duration
+	sync.Mutex          // TODO: we should clean up all of these locks
+	client              influxdb.Client
+	precision, database string
+	tagList             []string
+	batchP              influxdb.BatchPoints
+	lastBatchUpdate     time.Time
+	batchInterval       time.Duration
+	batchCount          int
 }
 
-// NewInfluxDBHook creates a hook to be added to an instance of logger and initializes the InfluxDB client
-func NewInfluxDBHook(
-	hostname, database string,
-	tagList []string,
-) (*InfluxDBHook, error) {
+func NewInfluxDB(config *Config, clients ...influxdb.Client) (hook *InfluxDBHook, err error) {
+	if config == nil {
+		config = &Config{}
+	}
+	config.defaults()
 
-	if hostname == "" {
-		hostname = DefaultHost
+	var client influxdb.Client
+	if len(clients) == 0 {
+		client, err = hook.newInfluxDBClient(config)
+		if err != nil {
+			return nil, fmt.Errorf("NewInfluxDB: Error creating InfluxDB Client, %v", err)
+		}
+	} else if len(clients) == 1 {
+		client = clients[0]
+	} else {
+		return nil, fmt.Errorf("NewInfluxDB: Error creating InfluxDB Client, %d is too many influxdb clients", len(clients))
 	}
 
-	// use the default database if we're missing one in the initialization
-	if database == "" {
-		database = DefaultDatabase
-	}
-
-	if tagList == nil { // if no tags exist then make an empty map[string]string
-		tagList = []string{}
-	}
-
-	batchInterval := DefaultBatchInterval
-
-	client, err := influxdb.NewHTTPClient(influxdb.HTTPConfig{
-		Addr:     fmt.Sprintf("http://%s:%d", hostname, DefaultPort),
-		Username: os.Getenv("INFLUX_USER"),
-		Password: os.Getenv("INFLUX_PWD"),
-		Timeout:  100 * time.Millisecond,
-	})
+	// Make sure that we can connect to InfluxDB
+	_, _, err = client.Ping(5 * time.Second) // if this takes more than 5 seconds then influxdb is probably down
 	if err != nil {
-		return nil, fmt.Errorf("NewInfluxDBHook: Error creating InfluxDB Client, %v", err)
+		return nil, fmt.Errorf("NewInfluxDB: Error connecting to InfluxDB, %v", err)
 	}
-	defer client.Close()
 
-	hook := &InfluxDBHook{
+	hook = &InfluxDBHook{
 		client:        client,
-		database:      database,
-		tagList:       tagList,
-		batchInterval: batchInterval,
+		database:      config.Database,
+		tagList:       config.Tags,
+		batchInterval: config.BatchInterval,
+		batchCount:    config.BatchCount,
+		precision:     config.Precision,
 	}
 
 	err = hook.autocreateDatabase()
 	if err != nil {
 		return nil, err
 	}
+	go hook.handleBatch()
 
 	return hook, nil
 }
 
-// NewWithClientInfluxDBHook creates a hook using an initialized InfluxDB client.
-func NewWithClientInfluxDBHook(
-	client influxdb.Client,
-	database string,
-	tagList []string,
-) (*InfluxDBHook, error) {
-	// use the default database if we're missing one in the initialization
-	if database == "" {
-		database = DefaultDatabase
-	}
-
-	if tagList == nil { // if no tags exist then make an empty map[string]string
-		tagList = []string{}
-	}
-
-	batchInterval := DefaultBatchInterval
-
-	// If the configuration is nil then assume default configurations
-	if client == nil {
-		return NewInfluxDBHook(DefaultHost, database, tagList)
-	}
-	return &InfluxDBHook{
-		client:        client,
-		database:      database,
-		tagList:       tagList,
-		batchInterval: batchInterval,
-	}, nil
-}
-
-// Fire is called when an event should be sent to InfluxDB
-func (hook *InfluxDBHook) Fire(entry *logrus.Entry) error {
-	// Merge all of the fields from Logrus as one entry in InfluxDB
-	fields := entry.Data
-
+func (hook *InfluxDBHook) Fire(entry *logrus.Entry) (err error) {
 	// If passing a "message" field then it will be overridden by the entry Message
-	fields["message"] = entry.Message
+	entry.Data["message"] = entry.Message
 
 	// Create a new point batch
-	if hook.batchP == nil {
-		var err error
-		hook.batchP, err = influxdb.NewBatchPoints(influxdb.BatchPointsConfig{
-			Database: hook.database,
-		})
-		if err != nil {
-			return fmt.Errorf("Fire: %v", err)
-		}
+	err = hook.newBatchPoints()
+	if err != nil {
+		return fmt.Errorf("Fire: %v", err)
 	}
 
-	var measurement string
-	var ok bool
-	if measurement, ok = getTag(entry.Data, "measurement"); !ok {
-		measurement = "logrus"
+	measurement := "logrus"
+	if result, ok := getTag(entry.Data, "measurement"); ok {
+		measurement = result
 	}
 
 	tags := make(map[string]string)
@@ -148,147 +101,62 @@ func (hook *InfluxDBHook) Fire(entry *logrus.Entry) error {
 		}
 	}
 
-	pt, err := influxdb.NewPoint(
-		measurement,
-		tags,
-		fields,
-		entry.Time,
-	)
+	pt, err := influxdb.NewPoint(measurement, tags, entry.Data, entry.Time)
 	if err != nil {
 		return fmt.Errorf("Fire: %v", err)
 	}
+	return hook.addPoint(pt)
+}
 
+func (hook *InfluxDBHook) addPoint(pt *influxdb.Point) (err error) {
+	hook.Lock()
+	defer hook.Unlock()
 	hook.batchP.AddPoint(pt)
-
-	// Arbitrary length of points trigger, just to make sure it doesn't overflow
-	if hook.lastBatchUpdate.Add(hook.batchInterval).Before(time.Now()) ||
-		len(hook.batchP.Points()) > 200 {
-		err = hook.client.Write(hook.batchP)
-		if err != nil {
-			return fmt.Errorf("Fire: %v", err)
-		}
-		hook.lastBatchUpdate = time.Now()
-		hook.batchP = nil
-	}
-
-	return nil
-}
-
-// queryDB convenience function to query the database
-func (hook *InfluxDBHook) queryDB(cmd string) ([]influxdb.Result, error) {
-	response, err := hook.client.Query(influxdb.Query{
-		Command:  cmd,
-		Database: hook.database,
-	})
-	if err != nil {
-		return nil, err
-	}
-	if response.Error() != nil {
-		return nil, response.Error()
-	}
-
-	return response.Results, nil
-}
-
-// Return back an error if the database does not exist in InfluxDB
-func (hook *InfluxDBHook) databaseExists() error {
-	results, err := hook.queryDB("SHOW DATABASES")
-	if err != nil {
-		return err
-	}
-	if results == nil || len(results) == 0 {
-		return errors.New("Missing results from InfluxDB query response")
-	}
-	if results[0].Series == nil || len(results[0].Series) == 0 {
-		return errors.New("Missing series from InfluxDB query response")
-	}
-
-	// This can probably be cleaned up
-	for _, value := range results[0].Series[0].Values {
-		for _, val := range value {
-			if v, ok := val.(string); ok { // InfluxDB returns back an interface. Try to check only the string values.
-				if v == hook.database { // If we the database exists, return back nil errors
-					return nil
-				}
-			}
-		}
-	}
-	return errors.New("No matching database can be detected")
-}
-
-// Try to detect if the database exists and if not, automatically create one.
-func (hook *InfluxDBHook) autocreateDatabase() error {
-	err := hook.databaseExists()
-	if err == nil {
+	if len(hook.batchP.Points()) < hook.batchCount {
 		return nil
 	}
+	return hook.writePoints()
+}
 
-	_, err = hook.queryDB(fmt.Sprintf("CREATE DATABASE %s", hook.database))
+func (hook *InfluxDBHook) writePoints() (err error) {
+	err = hook.client.Write(hook.batchP)
 	if err != nil {
 		return err
 	}
-
+	hook.lastBatchUpdate = time.Now().UTC()
+	hook.batchP = nil
 	return nil
 }
 
-// Try to return a field from logrus
-// Taken from Sentry adapter (from https://github.com/evalphobia/logrus_sentry)
-func getTag(d logrus.Fields, key string) (string, bool) {
-
-	var ok bool
-	var v interface{}
-
-	if v, ok = d[key]; !ok {
-		return "", false
+func (hook *InfluxDBHook) handleBatch() {
+	if hook.batchInterval == 0 || hook.batchCount == 0 {
+		// we don't need to process this if the interval is 0
+		return
 	}
-
-	switch vs := v.(type) {
-	case fmt.Stringer:
-		return vs.String(), true
-	case string:
-		return vs, true
-	case int:
-		return strconv.FormatInt(int64(vs), 10), true
-	case int32:
-		return strconv.FormatInt(int64(vs), 10), true
-	case int64:
-		return strconv.FormatInt(vs, 10), true
-	case uint:
-		return strconv.FormatUint(uint64(vs), 10), true
-	case uint32:
-		return strconv.FormatUint(uint64(vs), 10), true
-	case uint64:
-		return strconv.FormatUint(vs, 10), true
-	default:
-		return "", false
+	for {
+		time.Sleep(hook.batchInterval)
+		hook.Lock()
+		hook.writePoints()
+		hook.Unlock()
 	}
 }
 
-// Try to return an http request
-// Taken from Sentry adapter (from https://github.com/evalphobia/logrus_sentry)
-func getRequest(d logrus.Fields, key string) (*http.Request, bool) {
-	var (
-		ok  bool
-		v   interface{}
-		req *http.Request
-	)
-	if v, ok = d[key]; !ok {
-		return nil, false
+/* BEGIN BACKWARDS COMPATIBILITY */
+
+// NewInfluxDBHook creates a hook to be added to an instance of logger and initializes the InfluxDB client
+func NewInfluxDBHook(host, database string, tags []string, batching ...bool) (hook *InfluxDBHook, err error) {
+	if len(batching) == 1 && batching[0] {
+		return NewInfluxDB(&Config{Host: host, Database: database, Tags: tags}, nil)
 	}
-	if req, ok = v.(*http.Request); !ok || req == nil {
-		return nil, false
-	}
-	return req, true
+	return NewInfluxDB(&Config{Host: host, Database: database, Tags: tags, BatchCount: 0}, nil)
 }
 
-// Levels is available logging levels.
-func (hook *InfluxDBHook) Levels() []logrus.Level {
-	return []logrus.Level{
-		logrus.PanicLevel,
-		logrus.FatalLevel,
-		logrus.ErrorLevel,
-		logrus.WarnLevel,
-		logrus.InfoLevel,
-		logrus.DebugLevel,
+// NewWithClientInfluxDBHook creates a hook and uses the provided influxdb client
+func NewWithClientInfluxDBHook(host, database string, tags []string, client influxdb.Client, batching ...bool) (hook *InfluxDBHook, err error) {
+	if len(batching) == 1 && batching[0] {
+		return NewInfluxDB(&Config{Host: host, Database: database, Tags: tags}, client)
 	}
+	return NewInfluxDB(&Config{Host: host, Database: database, Tags: tags, BatchCount: 0}, client)
 }
+
+/* END BACKWARDS COMPATIBILITY */
