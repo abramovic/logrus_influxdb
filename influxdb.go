@@ -9,7 +9,7 @@ import (
 
 func (hook *InfluxDBHook) newInfluxDBClient(config *Config) (influxdb.Client, error) {
 	protocol := "http"
-	if config.UseHTTPs {
+	if config.UseHTTPS {
 		protocol = "https"
 	}
 	return influxdb.NewHTTPClient(influxdb.HTTPConfig{

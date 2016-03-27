@@ -5,6 +5,7 @@ import (
 	"time"
 )
 
+// Config contains all the conf for the hook
 type Config struct {
 	// InfluxDB Configurations
 	Host      string `json:"influxdb_host"`
@@ -12,7 +13,7 @@ type Config struct {
 	Database  string `json:"influxdb_database"`
 	Username  string `json:"influxdb_username"`
 	Password  string `json:"influxdb_password"`
-	UseHTTPs  bool   `json:"influxdb_usehttps"`
+	UseHTTPS  bool   `json:"influxdb_usehttps"`
 	Precision string `json:"influxdb_precision"`
 
 	// Logrus tags
