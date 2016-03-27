@@ -5,8 +5,11 @@
 
 ## Usage
 
+[Examples](https://github.com/Abramovic/logrus_influxdb/tree/master/examples)
+
 ```go
 import (
+  "time"
   "github.com/Sirupsen/logrus"
   "github.com/Abramovic/logrus_influxdb"
 )
@@ -17,7 +20,7 @@ func main() {
     Host: "localhost",
     Port: 8086,
     Database: "logrus",
-    UseHTTPs: false,
+    UseHTTPS: false,
     Precision: "ns",
     Tags: []string{"tag1", "tag2"},
     BatchInterval: (5 * time.Second),
@@ -44,21 +47,18 @@ If you wish to initialize a InfluxDB Hook with an already initialized InfluxDB c
 
 ```go
 import (
-  "net/url"
-  "fmt"
-  "time"
-  "github.com/Sirupsen/logrus"
-  "github.com/Abramovic/logrus_influxdb"
-  client "github.com/influxdata/influxdb/client/v2"
+	"github.com/Abramovic/logrus_influxdb"
+	"github.com/Sirupsen/logrus"
+	client "github.com/influxdata/influxdb/client/v2"
 )
 
 func main() {
 	log := logrus.New()
 
-  // In this example we will use the default configurations
-  config := &logrus_influxdb.Config{
-    Tags:  []string{"tag1", "tag2"}, // use the following tags
-  }
+	// In this example we will use the default configurations
+	config := &logrus_influxdb.Config{
+		Tags: []string{"tag1", "tag2"}, // use the following tags
+	}
 
 	// Connect to InfluxDB using the standard client.
 	influxClient, _ := client.NewHTTPClient(client.HTTPConfig{
