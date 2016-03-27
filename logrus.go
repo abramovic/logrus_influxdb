@@ -2,9 +2,10 @@ package logrus_influxdb
 
 import (
 	"fmt"
-	"github.com/Sirupsen/logrus"
 	"net/http"
 	"strconv"
+
+	"github.com/Sirupsen/logrus"
 )
 
 // Try to return a field from logrus

@@ -30,7 +30,11 @@ type InfluxDBHook struct {
 	batchCount          int
 }
 
-func NewInfluxDB(config *Config, clients ...influxdb.Client) (hook *InfluxDBHook, err error) {
+// NewInfluxDB create a new Hook and creates a client if it is missing
+func NewInfluxDB(
+	config *Config,
+	clients ...influxdb.Client,
+) (hook *InfluxDBHook, err error) {
 	if config == nil {
 		config = &Config{}
 	}
@@ -72,6 +76,7 @@ func NewInfluxDB(config *Config, clients ...influxdb.Client) (hook *InfluxDBHook
 	return hook, nil
 }
 
+// Fire will be triggered after each log
 func (hook *InfluxDBHook) Fire(entry *logrus.Entry) (err error) {
 	// If passing a "message" field then it will be overridden by the entry Message
 	entry.Data["message"] = entry.Message
