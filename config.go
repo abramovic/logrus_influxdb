@@ -12,7 +12,7 @@ type Config struct {
 	Database  string `json:"influxdb_database"`
 	Username  string `json:"influxdb_username"`
 	Password  string `json:"influxdb_password"`
-	UseHTTPs  bool   `json:"influxdb_usehttps"`
+	UseHTTPS  bool   `json:"influxdb_https"`
 	Precision string `json:"influxdb_precision"`
 
 	// Logrus tags
