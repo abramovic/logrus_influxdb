@@ -76,12 +76,6 @@ func (hook *InfluxDBHook) Fire(entry *logrus.Entry) (err error) {
 	// If passing a "message" field then it will be overridden by the entry Message
 	entry.Data["message"] = entry.Message
 
-	// Create a new point batch
-	err = hook.newBatchPoints()
-	if err != nil {
-		return fmt.Errorf("Fire: %v", err)
-	}
-
 	measurement := "logrus"
 	if result, ok := getTag(entry.Data, "measurement"); ok {
 		measurement = result
@@ -111,7 +105,15 @@ func (hook *InfluxDBHook) Fire(entry *logrus.Entry) (err error) {
 func (hook *InfluxDBHook) addPoint(pt *influxdb.Point) (err error) {
 	hook.Lock()
 	defer hook.Unlock()
+	if hook.batchP == nil {
+		// Create a new point batch
+		err = hook.newBatchPoints()
+		if err != nil {
+			return fmt.Errorf("Error creating new batch: %v", err)
+		}
+	}
 	hook.batchP.AddPoint(pt)
+
 	if len(hook.batchP.Points()) < hook.batchCount {
 		return nil
 	}
