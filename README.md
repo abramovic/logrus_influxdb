@@ -1,11 +1,20 @@
 # InfluxDB Hook for Logrus
 
-[InfluxDB](https://influxdb.com) Scalable datastore for metrics, events, and real-time analytics
-[GitHub](https://github.com/influxdata/influxdb)
+Feel free to create an issue or send me a pull request if you have any questions, bugs, or suggestions for this library.
+
+- [GoDoc](https://godoc.org/github.com/Abramovic/logrus_influxdb)
+- [Examples](https://github.com/Abramovic/logrus_influxdb/tree/master/examples)
+- [Logrus](https://github.com/Sirupsen/logrus)
+- [InfluxDB](https://influxdb.com)
+
+#### [Contributors](https://github.com/Abramovic/logrus_influxdb/graphs/contributors)
+
+Thank you for creating issues and pull requests!
+
+- [Vincent Serpoul](https://github.com/vincentserpoul)
+- [Vlad-Doru Ion](https://github.com/vlad-doru)
 
 ## Usage
-
-[Examples](https://github.com/Abramovic/logrus_influxdb/tree/master/examples)
 
 ```go
 import (
@@ -71,7 +80,6 @@ func main() {
 	}
 }
 ```
-
 
 ## Behind the scenes
 
