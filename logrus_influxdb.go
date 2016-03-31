@@ -30,6 +30,7 @@ type InfluxDBHook struct {
 	batchCount          int
 }
 
+// NewInfluxDB returns a new InfluxDBHook.
 func NewInfluxDB(config *Config, clients ...influxdb.Client) (hook *InfluxDBHook, err error) {
 	if config == nil {
 		config = &Config{}
@@ -72,6 +73,7 @@ func NewInfluxDB(config *Config, clients ...influxdb.Client) (hook *InfluxDBHook
 	return hook, nil
 }
 
+// Fire adds a new InfluxDB point based off of Logrus entry
 func (hook *InfluxDBHook) Fire(entry *logrus.Entry) (err error) {
 	// If passing a "message" field then it will be overridden by the entry Message
 	entry.Data["message"] = entry.Message
@@ -106,7 +108,6 @@ func (hook *InfluxDBHook) addPoint(pt *influxdb.Point) (err error) {
 	hook.Lock()
 	defer hook.Unlock()
 	if hook.batchP == nil {
-		// Create a new point batch
 		err = hook.newBatchPoints()
 		if err != nil {
 			return fmt.Errorf("Error creating new batch: %v", err)
@@ -114,6 +115,7 @@ func (hook *InfluxDBHook) addPoint(pt *influxdb.Point) (err error) {
 	}
 	hook.batchP.AddPoint(pt)
 
+	// if the number of batch points are less than the batch size then we don't need to write them yet
 	if len(hook.batchP.Points()) < hook.batchCount {
 		return nil
 	}
@@ -130,6 +132,7 @@ func (hook *InfluxDBHook) writePoints() (err error) {
 	return nil
 }
 
+// we will periodically flush your points to influxdb.
 func (hook *InfluxDBHook) handleBatch() {
 	if hook.batchInterval == 0 || hook.batchCount == 0 {
 		// we don't need to process this if the interval is 0
@@ -145,7 +148,7 @@ func (hook *InfluxDBHook) handleBatch() {
 
 /* BEGIN BACKWARDS COMPATIBILITY */
 
-// NewInfluxDBHook creates a hook to be added to an instance of logger and initializes the InfluxDB client
+// NewInfluxDBHook /* DO NOT USE */ creates a hook to be added to an instance of logger and initializes the InfluxDB client
 func NewInfluxDBHook(host, database string, tags []string, batching ...bool) (hook *InfluxDBHook, err error) {
 	if len(batching) == 1 && batching[0] {
 		return NewInfluxDB(&Config{Host: host, Database: database, Tags: tags}, nil)
@@ -153,7 +156,7 @@ func NewInfluxDBHook(host, database string, tags []string, batching ...bool) (ho
 	return NewInfluxDB(&Config{Host: host, Database: database, Tags: tags, BatchCount: 0}, nil)
 }
 
-// NewWithClientInfluxDBHook creates a hook and uses the provided influxdb client
+// NewWithClientInfluxDBHook /* DO NOT USE */ creates a hook and uses the provided influxdb client
 func NewWithClientInfluxDBHook(host, database string, tags []string, client influxdb.Client, batching ...bool) (hook *InfluxDBHook, err error) {
 	if len(batching) == 1 && batching[0] {
 		return NewInfluxDB(&Config{Host: host, Database: database, Tags: tags}, client)

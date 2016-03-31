@@ -7,6 +7,7 @@ import (
 	influxdb "github.com/influxdata/influxdb/client/v2"
 )
 
+// Returns an influxdb client
 func (hook *InfluxDBHook) newInfluxDBClient(config *Config) (influxdb.Client, error) {
 	protocol := "http"
 	if config.UseHTTPS {
@@ -19,8 +20,8 @@ func (hook *InfluxDBHook) newInfluxDBClient(config *Config) (influxdb.Client, er
 		Timeout:  100 * time.Millisecond,
 	})
 }
-
 func (hook *InfluxDBHook) newBatchPoints() (err error) {
+	// make sure we're only creating new batch points when we don't already have them
 	if hook.batchP != nil {
 		return nil
 	}

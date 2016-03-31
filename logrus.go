@@ -53,7 +53,7 @@ func getRequest(d logrus.Fields, key string) (req *http.Request, ok bool) {
 	return req, true
 }
 
-// Levels is available logging levels.
+// Levels are the available logging levels.
 func (hook *InfluxDBHook) Levels() []logrus.Level {
 	return []logrus.Level{
 		logrus.PanicLevel,

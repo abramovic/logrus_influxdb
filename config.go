@@ -5,6 +5,7 @@ import (
 	"time"
 )
 
+// Config handles InfluxDB configuration, Logrus tags and batching inserts to InfluxDB
 type Config struct {
 	// InfluxDB Configurations
 	Host      string `json:"influxdb_host"`
