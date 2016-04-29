@@ -14,6 +14,7 @@ var (
 	defaultPort          = 8086
 	defaultDatabase      = "logrus"
 	defaultBatchInterval = 5 * time.Second
+	defaultMeasurement   = "logrus"
 	defaultBatchCount    = 200
 	defaultPrecision     = "ns"
 )
@@ -22,7 +23,7 @@ var (
 type InfluxDBHook struct {
 	sync.Mutex          // TODO: we should clean up all of these locks
 	client              influxdb.Client
-	precision, database string
+	precision, database, measurement string
 	tagList             []string
 	batchP              influxdb.BatchPoints
 	lastBatchUpdate     time.Time
@@ -58,6 +59,7 @@ func NewInfluxDB(config *Config, clients ...influxdb.Client) (hook *InfluxDBHook
 	hook = &InfluxDBHook{
 		client:        client,
 		database:      config.Database,
+		measurement:	 config.Measurement,
 		tagList:       config.Tags,
 		batchInterval: config.BatchInterval,
 		batchCount:    config.BatchCount,
@@ -78,7 +80,7 @@ func (hook *InfluxDBHook) Fire(entry *logrus.Entry) (err error) {
 	// If passing a "message" field then it will be overridden by the entry Message
 	entry.Data["message"] = entry.Message
 
-	measurement := "logrus"
+	measurement := hook.measurement
 	if result, ok := getTag(entry.Data, "measurement"); ok {
 		measurement = result
 	}

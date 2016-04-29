@@ -19,6 +19,9 @@ type Config struct {
 	// Logrus tags
 	Tags []string `json:"logrus_tags"`
 
+	// Defaults
+	Measurement string `json:"measurement"`
+
 	// Batching
 	BatchInterval time.Duration `json:"batch_interval"` // Defaults to 5s.
 	BatchCount    int           `json:"batch_count"`    // Defaults to 200.
@@ -46,6 +49,9 @@ func (c *Config) defaults() {
 	}
 	if c.Tags == nil {
 		c.Tags = []string{}
+	}
+	if c.Measurement == "" {
+		c.Measurement = defaultMeasurement
 	}
 	if c.BatchInterval < 0 {
 		c.BatchInterval = defaultBatchInterval
