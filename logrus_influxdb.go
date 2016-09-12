@@ -93,14 +93,20 @@ func (hook *InfluxDBHook) Fire(entry *logrus.Entry) (err error) {
 		tags["logger"] = logger
 	}
 
+	// make a copy of entry.Data
+	data := make(map[string]interface{})
+	for k, v := range entry.Data {
+		data[k] = v
+	}
+
 	for _, tag := range hook.tagList {
 		if tagValue, ok := getTag(entry.Data, tag); ok {
 			tags[tag] = tagValue
-			delete(map[string]interface{}(entry.Data), tag)
+			delete(data, tag)
 		}
 	}
 
-	pt, err := influxdb.NewPoint(measurement, tags, entry.Data, entry.Time)
+	pt, err := influxdb.NewPoint(measurement, tags, data, entry.Time)
 	if err != nil {
 		return fmt.Errorf("Fire: %v", err)
 	}
