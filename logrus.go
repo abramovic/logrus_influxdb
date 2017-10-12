@@ -2,7 +2,7 @@ package logrus_influxdb
 
 import (
 	"fmt"
-	"github.com/Sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 	"net/http"
 	"strconv"
 )
