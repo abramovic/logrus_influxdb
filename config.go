@@ -8,13 +8,14 @@ import (
 // Config handles InfluxDB configuration, Logrus tags and batching inserts to InfluxDB
 type Config struct {
 	// InfluxDB Configurations
-	Host      string `json:"influxdb_host"`
-	Port      int    `json:"influxdb_port"`
-	Database  string `json:"influxdb_database"`
-	Username  string `json:"influxdb_username"`
-	Password  string `json:"influxdb_password"`
-	UseHTTPS  bool   `json:"influxdb_https"`
-	Precision string `json:"influxdb_precision"`
+	Host      string        `json:"influxdb_host"`
+	Port      int           `json:"influxdb_port"`
+	Timeout   time.Duration `json:"influxdb_timeout"`
+	Database  string        `json:"influxdb_database"`
+	Username  string        `json:"influxdb_username"`
+	Password  string        `json:"influxdb_password"`
+	UseHTTPS  bool          `json:"influxdb_https"`
+	Precision string        `json:"influxdb_precision"`
 
 	// Logrus tags
 	Tags []string `json:"logrus_tags"`
@@ -34,6 +35,9 @@ func (c *Config) defaults() {
 	}
 	if c.Port == 0 {
 		c.Port = defaultPort
+	}
+	if c.Timeout == 0 {
+		c.Timeout = 100 * time.Millisecond
 	}
 	if c.Database == "" {
 		c.Database = defaultDatabase
