@@ -2,7 +2,6 @@ package logrus_influxdb
 
 import (
 	"fmt"
-	"time"
 
 	influxdb "github.com/influxdata/influxdb/client/v2"
 )
@@ -17,7 +16,7 @@ func (hook *InfluxDBHook) newInfluxDBClient(config *Config) (influxdb.Client, er
 		Addr:     fmt.Sprintf("%s://%s:%d", protocol, config.Host, config.Port),
 		Username: config.Username,
 		Password: config.Password,
-		Timeout:  100 * time.Millisecond,
+		Timeout:  config.Timeout,
 	})
 }
 func (hook *InfluxDBHook) newBatchPoints() (err error) {
