@@ -132,6 +132,9 @@ func (hook *InfluxDBHook) addPoint(pt *influxdb.Point) (err error) {
 }
 
 func (hook *InfluxDBHook) writePoints() (err error) {
+	if hook.batchP == nil {
+		return nil
+	}
 	err = hook.client.Write(hook.batchP)
 	if err != nil {
 		return err
