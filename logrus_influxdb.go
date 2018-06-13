@@ -5,8 +5,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	influxdb "github.com/influxdata/influxdb/client/v2"
+	"github.com/sirupsen/logrus"
 )
 
 var (
@@ -131,17 +131,22 @@ func (hook *InfluxDBHook) addPoint(pt *influxdb.Point) (err error) {
 	return hook.writePoints()
 }
 
+// writePoints writes the batched log entries to InfluxDB.
 func (hook *InfluxDBHook) writePoints() (err error) {
 	if hook.batchP == nil {
 		return nil
 	}
 	err = hook.client.Write(hook.batchP)
-	if err != nil {
-		return err
-	}
+	// Note: the InfluxDB client doesn't give us any good way to determine the reason for
+	// a failure (bad syntax, invalid type, failed connection, etc.), so there is no
+	// point in retrying a write.  If the write fails, then we're going to clear out the
+	// batch, just as we would for a successful write.
+
 	hook.lastBatchUpdate = time.Now().UTC()
 	hook.batchP = nil
-	return nil
+
+	// Return the write error (if any).
+	return err
 }
 
 // we will periodically flush your points to influxdb.
