@@ -2,9 +2,10 @@ package logrus_influxdb
 
 import (
 	"fmt"
-	"github.com/sirupsen/logrus"
 	"net/http"
 	"strconv"
+
+	"github.com/sirupsen/logrus"
 )
 
 // Try to return a field from logrus
@@ -62,5 +63,6 @@ func (hook *InfluxDBHook) Levels() []logrus.Level {
 		logrus.WarnLevel,
 		logrus.InfoLevel,
 		logrus.DebugLevel,
+		logrus.TraceLevel,
 	}
 }
