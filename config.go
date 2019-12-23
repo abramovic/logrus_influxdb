@@ -24,6 +24,9 @@ type Config struct {
 	AppName      string `json:"syslog_app_name"`
 	Version      string `json:"syslog_app_version"`
 
+	// Minimum level for push
+	MinLevel string `json:"syslog_min_level"`
+
 	// Logrus tags
 	Tags []string `json:"logrus_tags"`
 

@@ -36,6 +36,7 @@ type InfluxDBHook struct {
 	facilityCode                     int
 	appName                          string
 	version                          string
+	minLevel                         string
 }
 
 // NewInfluxDB returns a new InfluxDBHook.
@@ -76,6 +77,7 @@ func NewInfluxDB(config *Config, clients ...influxdb.Client) (hook *InfluxDBHook
 		facilityCode:  config.FacilityCode,
 		appName:       config.AppName,
 		version:       config.Version,
+		minLevel:      config.MinLevel,
 	}
 
 	err = hook.autocreateDatabase()
@@ -103,69 +105,114 @@ func parseSeverity(level string) (string, int) {
 		return "warning", 4
 	}
 
-	return "", -1
+	return "none", -1
+}
+
+func stringInSlice(a string, list []string) bool {
+	for _, b := range list {
+		if b == a {
+			return true
+		}
+	}
+	return false
+}
+
+func (hook *InfluxDBHook) hasMinLevel(level string) bool {
+	if len(hook.minLevel) > 0 {
+		if hook.minLevel == "debug" {
+			return true
+		}
+
+		if hook.minLevel == "info" {
+			return stringInSlice(level, []string{"info", "warning", "error", "fatal", "panic"})
+		}
+
+		if hook.minLevel == "warning" {
+			return stringInSlice(level, []string{"warning", "error", "fatal", "panic"})
+		}
+
+		if hook.minLevel == "error" {
+			return stringInSlice(level, []string{"error", "fatal", "panic"})
+		}
+
+		if hook.minLevel == "fatal" {
+			return stringInSlice(level, []string{"fatal", "panic"})
+		}
+
+		if hook.minLevel == "panic" {
+			return level == "panic"
+		}
+
+		return false
+	}
+
+	return true
 }
 
 // Fire adds a new InfluxDB point based off of Logrus entry
 func (hook *InfluxDBHook) Fire(entry *logrus.Entry) (err error) {
-	measurement := hook.measurement
-	if result, ok := getTag(entry.Data, "measurement"); ok {
-		measurement = result
-	}
-
-	tags := make(map[string]string)
-	data := make(map[string]interface{})
-
-	if hook.syslog {
-		hostname, err := os.Hostname()
-
-		if err != nil {
-			return err
+	if hook.hasMinLevel(entry.Level.String()) {
+		measurement := hook.measurement
+		if result, ok := getTag(entry.Data, "measurement"); ok {
+			measurement = result
 		}
 
-		severity, severityCode := parseSeverity(entry.Level.String())
+		tags := make(map[string]string)
+		data := make(map[string]interface{})
 
-		tags["appname"] = hook.appName
-		tags["facility"] = hook.facility
-		tags["host"] = hostname
-		tags["hostname"] = hostname
-		tags["severity"] = severity
+		if hook.syslog {
+			hostname, err := os.Hostname()
 
-		data["facility_code"] = hook.facilityCode
-		data["message"] = entry.Message
-		data["procid"] = os.Getpid()
-		data["severity_code"] = severityCode
-		data["timestamp"] = entry.Time.UnixNano()
-		data["version"] = hook.version
-	} else {
-		// If passing a "message" field then it will be overridden by the entry Message
-		entry.Data["message"] = entry.Message
+			if err != nil {
+				return err
+			}
 
-		// Set the level of the entry
-		tags["level"] = entry.Level.String()
-		// getAndDel and getAndDelRequest are taken from https://github.com/evalphobia/logrus_sentry
-		if logger, ok := getTag(entry.Data, "logger"); ok {
-			tags["logger"] = logger
-		}
+			severity, severityCode := parseSeverity(entry.Level.String())
 
-		for k, v := range entry.Data {
-			data[k] = v
-		}
+			tags["appname"] = hook.appName
+			tags["facility"] = hook.facility
+			tags["host"] = hostname
+			tags["hostname"] = hostname
+			tags["severity"] = severity
 
-		for _, tag := range hook.tagList {
-			if tagValue, ok := getTag(entry.Data, tag); ok {
-				tags[tag] = tagValue
-				delete(data, tag)
+			data["facility_code"] = hook.facilityCode
+			data["message"] = entry.Message
+			data["procid"] = os.Getpid()
+			data["severity_code"] = severityCode
+			data["timestamp"] = entry.Time.UnixNano()
+			data["version"] = hook.version
+		} else {
+			// If passing a "message" field then it will be overridden by the entry Message
+			entry.Data["message"] = entry.Message
+
+			// Set the level of the entry
+			tags["level"] = entry.Level.String()
+			// getAndDel and getAndDelRequest are taken from https://github.com/evalphobia/logrus_sentry
+			if logger, ok := getTag(entry.Data, "logger"); ok {
+				tags["logger"] = logger
+			}
+
+			for k, v := range entry.Data {
+				data[k] = v
+			}
+
+			for _, tag := range hook.tagList {
+				if tagValue, ok := getTag(entry.Data, tag); ok {
+					tags[tag] = tagValue
+					delete(data, tag)
+				}
 			}
 		}
+
+		pt, err := influxdb.NewPoint(measurement, tags, data, entry.Time)
+		if err != nil {
+			return fmt.Errorf("Fire: %v", err)
+		}
+
+		return hook.addPoint(pt)
 	}
 
-	pt, err := influxdb.NewPoint(measurement, tags, data, entry.Time)
-	if err != nil {
-		return fmt.Errorf("Fire: %v", err)
-	}
-
-	return hook.addPoint(pt)
+	return nil
 }
 
 func (hook *InfluxDBHook) addPoint(pt *influxdb.Point) (err error) {
