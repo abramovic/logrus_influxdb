@@ -108,9 +108,6 @@ func parseSeverity(level string) (string, int) {
 
 // Fire adds a new InfluxDB point based off of Logrus entry
 func (hook *InfluxDBHook) Fire(entry *logrus.Entry) (err error) {
-	// If passing a "message" field then it will be overridden by the entry Message
-	entry.Data["message"] = entry.Message
-
 	measurement := hook.measurement
 	if result, ok := getTag(entry.Data, "measurement"); ok {
 		measurement = result
@@ -135,12 +132,15 @@ func (hook *InfluxDBHook) Fire(entry *logrus.Entry) (err error) {
 		tags["severity"] = severity
 
 		data["facility_code"] = hook.facilityCode
-		data["message"] = entry.Data["message"]
+		data["message"] = entry.Message
 		data["procid"] = os.Getpid()
 		data["severity_code"] = severityCode
 		data["timestamp"] = entry.Time.UnixNano()
 		data["version"] = hook.version
 	} else {
+		// If passing a "message" field then it will be overridden by the entry Message
+		entry.Data["message"] = entry.Message
+
 		// Set the level of the entry
 		tags["level"] = entry.Level.String()
 		// getAndDel and getAndDelRequest are taken from https://github.com/evalphobia/logrus_sentry
