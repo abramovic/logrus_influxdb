@@ -81,6 +81,50 @@ func main() {
 }
 ```
 
+#### In syslog format for chronograf log viewer
+
+If you wish to push your logs in syslog format so you can view all logs in the chronograf log viewer.
+
+```go
+import (
+  "time"
+  "github.com/Sirupsen/logrus"
+  "github.com/Abramovic/logrus_influxdb"
+)
+
+func main() {
+  log    := logrus.New()
+
+  config := &logrus_influxdb.Config{
+    Host: "localhost",
+    Port: 8086,
+    Database: "syslog", // set to syslog to view in logviewer
+    UseHTTPS: false,
+    Precision: "ns",
+    Tags: []string{"tag1", "tag2"},
+    BatchInterval: (5 * time.Second),
+    BatchCount: 200, // set to "0" to disable batching
+    Syslog:        true, // enable syslog format or not
+    Facility:      "user", // see https://en.wikipedia.org/wiki/Syslog#Facility
+    FacilityCode:  1, // see https://en.wikipedia.org/wiki/Syslog#Facility
+    AppName:       "cb-scheduler", // app_name to use
+    Version:       "1.0", // version of app
+  }
+
+  /*
+    Use nil if you want to use the default configurations
+
+    hook, err := logrus_influxdb.NewInfluxDB(nil)
+  */
+
+  hook, err := logrus_influxdb.NewInfluxDB(config)
+  if err == nil {
+    log.Hooks.Add(hook)
+  }  
+}
+
+```
+
 ## Behind the scenes
 
 #### Database Handling

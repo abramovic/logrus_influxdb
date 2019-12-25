@@ -17,6 +17,16 @@ type Config struct {
 	UseHTTPS  bool          `json:"influxdb_https"`
 	Precision string        `json:"influxdb_precision"`
 
+	// Enable syslog format for chronograf logviewer usage
+	Syslog       bool   `json:"syslog_enabled"`
+	Facility     string `json:"syslog_facility"`
+	FacilityCode int    `json:"syslog_facility_code"`
+	AppName      string `json:"syslog_app_name"`
+	Version      string `json:"syslog_app_version"`
+
+	// Minimum level for push
+	MinLevel string `json:"syslog_min_level"`
+
 	// Logrus tags
 	Tags []string `json:"logrus_tags"`
 
